@@ -1,110 +1,117 @@
 import numpy as np
 import cv2
-import lib.kitti_read as kitti_utils
 
 
-def Space2Bev(P0, side_range=(-20, 20),
-              fwd_range=(0, 70),
-              res=0.1):
-    x_img = (P0[0] / res).astype(np.int32)
-    y_img = (-P0[2] / res).astype(np.int32)
-
-    x_img -= int(np.floor(side_range[0] / res))
-    y_img += int(np.floor(fwd_range[1] / res)) - 1
-
-    return np.array([x_img, y_img])
-
-
-def vis_create_bev(width=750, side_range=(-20, 20), fwd_range=(0, 70),
-                   min_height=-2.5, max_height=1.5):
-    ''' Project pointcloud to bev image for simply visualization
-
-        Inputs:
-            pointcloud:     3 x N in camera 2 frame
-        Return:
-            cv color image
-
-    '''
-    res = float(fwd_range[1] - fwd_range[0]) / width
-    x_max = int((side_range[1] - side_range[0]) / res)
-    y_max = int((fwd_range[1] - fwd_range[0]) / res)
-    im = np.zeros([y_max, x_max], dtype=np.uint8)
-    im[:, :] = 255
-    im_rgb = cv2.cvtColor(im, cv2.COLOR_GRAY2BGR)
-    return im_rgb
-
-
-def vis_box_in_bev(im_bev, pos, dims, orien, width=750, gt=False, score=None,
-                   side_range=(-20, 20), fwd_range=(0, 70),
-                   min_height=-2.73, max_height=1.27):
-    """ Project 3D bounding box to bev image for simply visualization
-        It should use consistent width and side/fwd range input with
-        the function: vis_lidar_in_bev
-
-        Inputs:
-            im_bev:         cv image
-            pos, dim, orien: params of the 3D bounding box
-        Return:
-            cv color image
-
-    """
-    dim = dims.copy()
-    res = float(fwd_range[1] - fwd_range[0]) / width
-
-    R = kitti_utils.E2R(orien, 0, 0)
-    pts3_c_o = [pos + R.dot(np.array([dim[0] / 2., 0, dim[2] / 2.0]).T),
-                pos + R.dot(np.array([dim[0] / 2, 0, -dim[2] / 2.0]).T),
-                pos + R.dot(np.array([-dim[0] / 2, 0, -dim[2] / 2.0]).T),
-                pos + R.dot(np.array([-dim[0] / 2, 0, dim[2] / 2.0]).T), pos + R.dot([dim[0] / 1.5, 0, 0])]
-
-    pts2_bev = []
-    for index in range(5):
-        pts2_bev.append(Space2Bev(pts3_c_o[index], side_range=side_range,
-                                  fwd_range=fwd_range, res=res))
-
-    if gt is False:
-        lineColor3d = (100, 100, 0)
-    else:
-        lineColor3d = (0, 0, 255)
-    if gt == 'next':
-        lineColor3d = (255, 0, 0)
-    if gt == 'g':
-        lineColor3d = (0, 255, 0)
-    if gt == 'b':
-        lineColor3d = (255, 0, 0)
-    if gt == 'n':
-        lineColor3d = (5, 100, 100)
-    cv2.line(im_bev, (pts2_bev[0][0], pts2_bev[0][1]), (pts2_bev[1][0], pts2_bev[1][1]), lineColor3d, 1)
-    cv2.line(im_bev, (pts2_bev[1][0], pts2_bev[1][1]), (pts2_bev[2][0], pts2_bev[2][1]), lineColor3d, 1)
-    cv2.line(im_bev, (pts2_bev[2][0], pts2_bev[2][1]), (pts2_bev[3][0], pts2_bev[3][1]), lineColor3d, 1)
-    cv2.line(im_bev, (pts2_bev[0][0], pts2_bev[0][1]), (pts2_bev[3][0], pts2_bev[3][1]), lineColor3d, 1)
-
-    cv2.line(im_bev, (pts2_bev[1][0], pts2_bev[1][1]), (pts2_bev[4][0], pts2_bev[4][1]), lineColor3d, 1)
-    cv2.line(im_bev, (pts2_bev[0][0], pts2_bev[0][1]), (pts2_bev[4][0], pts2_bev[4][1]), lineColor3d, 1)
-
-    if score is not None:
-        show_text(im_bev, pts2_bev[4], score)
-    return im_bev
-
-
-def show_text(img, cor, score):
-    txt = '{:.2f}'.format(score)
-    font = cv2.FONT_HERSHEY_SIMPLEX
-
-    cv2.putText(img, txt, (cor[0], cor[1]),
-                font, 0.3, (255, 0, 0), thickness=1, lineType=cv2.LINE_AA)
+def add_3d_detection(img, results, calib):
+    dim = results[0:3]
+    pos = results[3:6]
+    ori = results[6:7]
+    cl = results[9:10]
+    pos[1] = pos[1] + dim[0] / 2
+    # loc[1] = loc[1] - dim[0] / 2 + dim[0] / 2 / self.dim_scale
+    # dim = dim / self.dim_scale
+    # cl = self.names[cat]
+    box_3d = compute_box_3d(dim, pos, ori)
+    box_2d = project_to_image(box_3d, calib)
+    img = draw_box_3d(img, box_2d, colors[int(cl)])
     return img
 
 
-def draw_Box3D(box3d, ax, color_set='b'):
-    for box in box3d:
-        bbox = box.copy()
-        box[0] = bbox[2]
-        box[1] = bbox[0]
-        box[2] = bbox[1]
+def project_to_image(pts_3d, P):
+    # pts_3d: n x 3
+    # P: 3 x 4
+    # return: n x 2
+    pts_3d_homo = np.concatenate(
+        [pts_3d, np.ones((pts_3d.shape[0], 1), dtype=np.float32)], axis=1)
+    pts_2d = np.dot(P, pts_3d_homo.transpose(1, 0)).transpose(1, 0)
+    pts_2d = pts_2d[:, :2] / pts_2d[:, 2:]
+    # import pdb; pdb.set_trace()
+    return pts_2d
 
-    line_order = ([0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6],
-                  [6, 7], [7, 4], [4, 0], [5, 1], [6, 2], [7, 3])
 
-    for k in line_order:
-        ax.plot3D(*zip(box3d[k[0]].T, box3d[k[1]].T), lw=1.5, color=color_set)
+def compute_box_3d(dim, location, rotation_y):
+    # dim: 3
+    # location: 3
+    # rotation_y: 1
+    # return: 8 x 3
+    c, s = np.cos(rotation_y), np.sin(rotation_y)
+    R = np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]], dtype=np.float32)
+    l, w, h = dim[2], dim[1], dim[0]
+    x_corners = [l / 2, l / 2, -l / 2, -l / 2, l / 2, l / 2, -l / 2, -l / 2, 0]
+    y_corners = [0, 0, 0, 0, -h, -h, -h, -h, -h / 2]
+    z_corners = [w / 2, -w / 2, -w / 2, w / 2, w / 2, -w / 2, -w / 2, w / 2, 0]
+
+    corners = np.array([x_corners, y_corners, z_corners], dtype=np.float32)
+    corners_3d = np.dot(R, corners)
+    corners_3d = corners_3d + np.array(location, dtype=np.float32).reshape(3, 1)
+    return corners_3d.transpose(1, 0)
+
+
+def draw_box_3d(image, corners, c=(225, 238, 160)):
+    face_idx = [[0, 1, 5, 4],
+                [1, 2, 6, 5],
+                [2, 3, 7, 6],
+                [3, 0, 4, 7]]
+    for ind_f in range(3, -1, -1):
+        f = face_idx[ind_f]
+        for j in range(4):
+            cv2.line(image, (corners[f[j], 0], corners[f[j], 1]),
+                     (corners[f[(j + 1) % 4], 0], corners[f[(j + 1) % 4], 1]), c, 1, lineType=cv2.LINE_AA)
+        # if ind_f == 0:
+        #     cv2.line(image, (corners[f[0], 0], corners[f[0], 1]),
+        #              (corners[f[2], 0], corners[f[2], 1]), c, 1, lineType=cv2.LINE_AA)
+        #     cv2.line(image, (corners[f[1], 0], corners[f[1], 1]),
+        #              (corners[f[3], 0], corners[f[3], 1]), c, 1, lineType=cv2.LINE_AA)
+    return image
+
+
+def draw_bev(bev, bev_labels):
+    if bev is None:
+        bev = np.zeros((500, 200, 3))
+
+    for i in range(1, 7):
+        cv2.circle(bev, (100, 400), i * 50, (10, 10, 10), 0)
+    for bev_label in bev_labels:
+        # [class, width, length, x, y, rotation]
+        # 下面几个参数，可能需要根据自己的数据进行调整
+        x = 100 + int(bev_label[3] * 5)  # 矩形框的中心点x
+        y = 400 - int(bev_label[4] * 5)  # 矩形框的中心点y
+        anglePi = bev_label[5]  # 矩形框的倾斜角度（长边相对于水平）
+        width, height = int(bev_label[1] * 5), int(bev_label[2] * 5)  # 矩形框的宽和高
+        cosA = np.sin(anglePi)
+        sinA = -np.cos(anglePi)
+
+        x1 = x - 0.5 * width
+        y1 = y - 0.5 * height
+        x0 = x + 0.5 * width
+        y0 = y1
+        x2 = x1
+        y2 = y + 0.5 * height
+        x3 = x0
+        y3 = y2
+
+        x0n = (x0 - x) * cosA - (y0 - y) * sinA + x
+        y0n = (x0 - x) * sinA + (y0 - y) * cosA + y
+        x1n = (x1 - x) * cosA - (y1 - y) * sinA + x
+        y1n = (x1 - x) * sinA + (y1 - y) * cosA + y
+        x2n = (x2 - x) * cosA - (y2 - y) * sinA + x
+        y2n = (x2 - x) * sinA + (y2 - y) * cosA + y
+        x3n = (x3 - x) * cosA - (y3 - y) * sinA + x
+        y3n = (x3 - x) * sinA + (y3 - y) * cosA + y
+
+        # 根据得到的点，画出矩形框
+        cv2.line(bev, (int(x0n), int(y0n)), (int(x1n), int(y1n)), (255, 255, 255), 1, 4)
+        cv2.line(bev, (int(x1n), int(y1n)), (int(x2n), int(y2n)), (255, 255, 255), 1, 4)
+        cv2.line(bev, (int(x2n), int(y2n)), (int(x3n), int(y3n)), (255, 255, 255), 1, 4)
+        cv2.line(bev, (int(x0n), int(y0n)), (int(x3n), int(y3n)), (255, 255, 255), 1, 4)
+    return bev
+
+
+colors = [[173, 202, 25],
+          [181, 199, 140],
+          [225, 238, 160],
+          [233, 231, 190],
+          [199, 237, 190],
+          [183, 213, 214],
+          [116, 186, 209],
+          [172, 206, 230]]

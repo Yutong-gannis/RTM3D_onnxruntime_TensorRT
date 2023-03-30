@@ -55,7 +55,7 @@ class RTMDetector:
         self.down_ratio = 4
         self.scale = 1
 
-        self.thresh = 0.5
+        self.thresh = 0.45
         self.K = 30  # 最大目标数
         self.nms = False
         const = torch.Tensor(
