@@ -70,14 +70,15 @@ def draw_bev(bev, bev_labels):
         bev = np.zeros((500, 200, 3))
 
     for i in range(1, 7):
-        cv2.circle(bev, (100, 400), i * 50, (10, 10, 10), 0)
+        cv2.circle(bev, (100, 400), i * 50, (150, 150, 150), 1)
+    multiple = 6  # 放大倍数
     for bev_label in bev_labels:
         # [class, width, length, x, y, rotation]
         # 下面几个参数，可能需要根据自己的数据进行调整
-        x = 100 + int(bev_label[3] * 5)  # 矩形框的中心点x
-        y = 400 - int(bev_label[4] * 5)  # 矩形框的中心点y
+        x = 100 + int(bev_label[3] * multiple)  # 矩形框的中心点x
+        y = 400 - int(bev_label[4] * multiple)  # 矩形框的中心点y
         anglePi = bev_label[5]  # 矩形框的倾斜角度（长边相对于水平）
-        width, height = int(bev_label[1] * 5), int(bev_label[2] * 5)  # 矩形框的宽和高
+        width, height = int(bev_label[1] * multiple), int(bev_label[2] * multiple)  # 矩形框的宽和高
         cosA = np.sin(anglePi)
         sinA = -np.cos(anglePi)
 

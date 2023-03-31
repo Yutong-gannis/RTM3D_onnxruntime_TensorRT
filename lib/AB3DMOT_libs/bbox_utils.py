@@ -1,9 +1,7 @@
-# Author: Xinshuo Weng
-# email: xinshuo.weng@gmail.com
-
-import numpy as np, copy
+import numpy as np
 from numba import jit
 from scipy.spatial import ConvexHull
+import copy
 
 
 # @jit
@@ -146,9 +144,9 @@ def convert_3dbox_to_8corner(bbox3d_input):
     h = bbox3d[6]
 
     # 3d bounding box corners
-    x_corners = [l / 2, l / 2, -l / 2, -l / 2, l / 2, l / 2, -l / 2, -l / 2];
-    y_corners = [0, 0, 0, 0, -h, -h, -h, -h];
-    z_corners = [w / 2, -w / 2, -w / 2, w / 2, w / 2, -w / 2, -w / 2, w / 2];
+    x_corners = [l / 2, l / 2, -l / 2, -l / 2, l / 2, l / 2, -l / 2, -l / 2]
+    y_corners = [0, 0, 0, 0, -h, -h, -h, -h]
+    z_corners = [w / 2, -w / 2, -w / 2, w / 2, w / 2, -w / 2, -w / 2, w / 2]
 
     # rotate and translate 3d bounding box
     corners_3d = np.dot(R, np.vstack([x_corners, y_corners, z_corners]))
