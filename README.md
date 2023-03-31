@@ -6,11 +6,11 @@ https://user-images.githubusercontent.com/69740611/228751467-ef6827a2-fa06-48d9-
 
 Put your weight file in `weights/kitti` folder. 
 
-run 'infer.py' for torch inference. 
+run `'infer.py` for torch inference. 
 
-run 'onnx_infer.py' for onnxruntime inference. 
+run `onnx_infer.py` for onnxruntime inference. 
 
-run 'trt_infer.py' for tensorrt inference. 
+run `trt_infer.py` for tensorrt inference. 
 
 You can get pretrained model [here](https://pan.baidu.com/s/1KKfRdFExq8lCWUDv9eC9jQ?pwd=799b )(password:799b)
 
